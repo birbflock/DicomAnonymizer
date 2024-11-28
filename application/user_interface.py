@@ -1,6 +1,7 @@
 import streamlit as st
 import json
 import pandas as pd
+from datetime import datetime
 from pydicom.tag import Tag
 from anonymizer_utils.anonymize_dicom import *
 from ui_utils.ui_logic import *
@@ -22,41 +23,46 @@ def streamlit_app():
     if 'edit_df' not in st.session_state:           # data editor
         st.session_state['edit_df'] = None
 
-        
+    
     # Inititalize pre-defined values
+    ## DICOM tags: used as Unique identifiers
     unique_ids = [
         'PatientName', 
         'PatientID', 
-        'AccessionNum'
+        'AccessionNumber'
     ]
 
-    predefined_tags = [
-        'PatientID',
-        'PatientName',
-        'AccessionNumber',
-        'StudyDate',
-        'Modality',
-        'StudyDescription',
+    ## DICOM tags: to be Shown in template for user's reference
+    ref_tags = [
         'PatientBirthDate', 
-        'InstitutionName'
+        'PatientSex', 
+        'PatientAge', 
+        'StudyDate'
     ]
 
-    default_tags = [
-        (0x0010, 0x0030),  # Patient's Birth Date
-        (0x0008, 0x0050),  # Accession Number
-        (0x0008, 0x0080),  # Institution Name
-    ]
+    ## DICOM tags: to be Anonymized as empty string
+    predefined_tags = None
 
-    update_tags = [
-        'PatientID'
-    ]
+    ## DICOM tags: Not anonymized
+    default_tags = None
+
+    ## DICOM tags: to be Anonymized default values or user's inputs
+    update_tags = {
+        'PatientName':      '', 
+        'PatientID':        '',
+        'InstitutionName':  '', 
+        'StudyDate':        datetime(1970,1,1).strftime('%Y%m%d'),
+        'PatientBirthDate': datetime(1970,1,1).strftime('%Y%m%d'),
+        'AccessionNumber':  lambda x: x[3:]
+    }
 
 
     # Page user interface
     st.set_page_config(page_title = 'DICOM Anonymizer')
     st.write('# DICOM Anonymizer:hospital::card_file_box:')
-
+    
     # Capture user's input of folder directory
+    
     user_folder = st.text_input(
         'Please copy and paste the full directory of the folder with DICOM files.', 
         placeholder='Enter the full file directory, e.g., "C:/Users/Documents"'
@@ -91,7 +97,12 @@ def streamlit_app():
     else: 
         with st.spinner(text='Fetching files...'):
             try: 
-                st.session_state['dcm_info'] = create_dcm_df(st.session_state['folder'], st.session_state['fformat'], unique_ids)
+                st.session_state['dcm_info'] = create_dcm_df(
+                    folder=st.session_state['folder'], 
+                    fformat=st.session_state['fformat'], 
+                    unique_ids=unique_ids, 
+                    ref_tags=ref_tags
+                )
                 st.session_state['uids'] = st.session_state['dcm_info'][unique_ids].drop_duplicates()
             except: 
                 st.error(':warning: We cannot find any files in the file format in the directory.')
@@ -107,13 +118,35 @@ def streamlit_app():
                 :point_down: You may download the auto-generated template by clicking the "Download" button below.
                 ''')
         
-        edit_df = st.session_state['uids']
-        edit_df['Update_PatientID'] = ''
-        edit_df['Update_PatientID'] = edit_df['Update_PatientID'].astype(str)
+        edit_df = create_update_cols(st.session_state['uids'], update_tags)
         st.session_state['edit_df'] = edit_df
         
         # A placeholder for download function
         download_function = st.empty()
+        
+        # A container of user instruction
+        with st.expander('User tips'): 
+            st.markdown(
+                '''
+                ### How are the DICOM tags anonymized? 
+                The following DICOM tags are allowed for updating values: 
+                - :blue-background[PatientName] : We advise anonymizing with case numbers or random characters. 
+                - :blue-background[PatientID] : We advise anonymizing with case numbers or random characters. 
+                - :blue-background[InstitutionName] : We advise anonymizing with your initials to identify the owners of the anonymized files. 
+                
+                The following DICOM tags are anonymized with default values:
+                - :blue-background[StudyDate] -> 1970/1/1
+                - :blue-background[PatientBirthDate] -> 1970/1/1
+                - :blue-background[AccessionNum] : The first 3 character representing the institution is removed. (i.e. PXH12345 -> 12345)
+                
+                The remaining DICOM tags are anonymized by wiping out the original values.
+                
+                ### What are the best practice of using this Anonymizer?
+                1. Update your inputs using the automatically generated template.
+                2. Under the columns of "Update_[DICOM Tag]", there is no empty input.
+                3. 
+                '''
+            )
         
         # A placeholder for display data editor
         display_data = st.empty()
@@ -231,7 +264,8 @@ def streamlit_app():
                         anonymize(
                             file_dir=file_dir, 
                             output_dir=output_dir, 
-                            update=update, 
+                            tags=predefined_tags,
+                            update=update,
                             tags_2_spare=default_tags
                         )
             

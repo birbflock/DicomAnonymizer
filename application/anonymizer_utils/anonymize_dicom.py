@@ -3,51 +3,48 @@ from pydicom.errors import InvalidDicomError
 from pydicom import *
 from pathlib import Path
 from typing import Optional
+from tqdm import auto
 
 import pandas as pd
-
 
 def create_output_dir(file_dir: str, folder_dir: Path) -> str:
     """Generates the output directory path for anonymized files."""
     return str(file_dir).replace(str(folder_dir), str(folder_dir.parent / f"{folder_dir.name}-Anonymized"))
 
-def create_dcm_df(folder: str, fformat: str, unique_ids: list):
+def create_dcm_df(folder: str, fformat: str, unique_ids: list, ref_tags: list) -> pd.DataFrame:
     """
     Gathers the meta data of each DICOM file from the folder. 
         
     Args: 
     - folder (str): The directory of folder with dicom files.
     - fformat (str): The file format of the targeted files. 
-    - pk (list): The list of columns used as primary keys.
+    - unique_ids (list): The list of columns used as primary keys.
+    - ref_tags (list): The list of columns to be shown in template.
         
     Returns:
-    - dcm_info (dict): Dictionary of the dicom tags. 
+    - dcm_info (pd.DataFrame): information of the dicom tags. 
     """
     folder_dir = Path(folder)
     all_dicom_files = list(folder_dir.rglob(f"*.{fformat}"))
-    dcm_info = {    
+    dcm_info = {
         'file_dir': [], 
-        'PatientID': [], 
-        'PatientName': [], 
-        'AccessionNum': [], 
         'output_dir': []
     }
+    dcm_info.update({tag: [] for tag in (unique_ids + ref_tags)})
     
-    for file_dir in all_dicom_files:
+    for file_dir in auto.tqdm(all_dicom_files):
+        dcm_info['file_dir'].append(str(file_dir))
+        dcm_info['output_dir'].append(create_output_dir(file_dir, folder_dir))
+
         try:
             f = pydicom.dcmread(str(file_dir), stop_before_pixels=True)
             
-            # Gather metadata
-            patient_id = f.PatientID
-            patient_name = ''.join(f.PatientName)
-            accession_num = f.AccessionNumber
-                        
-            # Append data to dcm_info
-            dcm_info['file_dir'].append(str(file_dir))
-            dcm_info['PatientID'].append(patient_id)
-            dcm_info['PatientName'].append(patient_name)
-            dcm_info['AccessionNum'].append(accession_num)
-            dcm_info['output_dir'].append(create_output_dir(file_dir, folder_dir))
+            # Gather metadata from DICOM tags
+            for tag in (unique_ids + ref_tags):
+                if tag == 'PatientName': 
+                    dcm_info[tag].append(''.join(getattr(f, tag, '')))
+                else: 
+                    dcm_info[tag].append(getattr(f, tag, None))
             
         except Exception as e:
             print(f"{e = }")
@@ -156,6 +153,28 @@ def anonymize(file_dir, output_dir, tags=None, update: Optional[dict] = None, ta
         >>> annonymize(folder, out_folder, tags, update=update)
 
     """
+    # DICOM Tag Table
+    dcm_tag = {
+        'PatientName':              (0x0010, 0x0010),
+        'PatientID':                (0x0010, 0x0020),
+        'PatientBirthDate':         (0x0010, 0x0030),
+        'PatientSex':               (0x0010, 0x0040),
+        'PatientAddress':           (0x0010, 0x1040),
+        'PatientPhoneNumber':       (0x0010, 0x2154),
+        'AccessionNumber':          (0x0008, 0x0050),
+        'StudyID':                  (0x0020, 0x0010),
+        'InstitutionName':          (0x0008, 0x0080),
+        'InstitutionAddress':       (0x0008, 0x0081),
+        'ReferringPhysicianName':   (0x0008, 0x0090),
+        'PhysicianofRecord':        (0x0008, 0x1048),
+        'PerformingPhysicianName':  (0x0008, 0x1050),
+        'OperatorName':             (0x0008, 0x1070),
+        'MedicalRecordLocator':     (0x0010, 0x1090),
+        'AdditionalPatientHistory': (0x0010, 0x21B0),
+        'PatientComments':          (0x0010, 0x4000),
+        'RequestingPhysician':      (0x0032, 0x1032)  
+    }
+    
     # Default tags to remove for anonymization
     if tags is None:
         tags = [
