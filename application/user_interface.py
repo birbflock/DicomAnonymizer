@@ -1,13 +1,49 @@
 import streamlit as st
 import json
 import pandas as pd
-from datetime import datetime
-from pydicom.tag import Tag
+
 from anonymizer_utils.anonymize_dicom import *
 from ui_utils.ui_logic import *
 
 def streamlit_app(): 
-    # Initialize session states
+    # Inititalize pre-defined values
+    ## DICOM tags: used as Unique identifiers (list)
+    unique_ids = [
+        'PatientName', 
+        'PatientID', 
+        'AccessionNumber'
+    ]
+
+    ## DICOM tags: to be Shown in template for user's reference (list)
+    ref_tags = [
+        'PatientBirthDate', 
+        'PatientSex', 
+        'PatientAge', 
+        'StudyDate'
+    ]
+    
+    ## DICOM tags: to be Anonymized default values or user's inputs (dict)
+    update_tags = {
+        'PatientName':      '',                                     # for user's inputs
+        'PatientID':        '',                                     # for user's inputs
+        'InstitutionName':  '',                                     # for user's inputs
+        'StudyDate':        '19700101',
+        'PatientBirthDate': '19700101',
+        'AccessionNumber':  lambda x: x[3:]                         # remove the first 3 characters        
+    }
+
+    ## DICOM tag: used as identifier in user-uploaded file (str)
+    upload_df_id = 'PatientID'
+    
+    ## DICOM tags: to be Anonymized as empty string (None-default or list)
+    ## >> Example: tags_2_anon = [(0x0010, 0x0010), (0x0010, 0x0020)]
+    tags_2_anon = None
+
+    ## DICOM tags: Not anonymized (list)
+    tags_2_spare = []
+
+
+# Initialize session states
     if 'user_folder' not in st.session_state:       # user input directory
         st.session_state['user_folder'] = ''
     if 'folder' not in st.session_state:            # folder path to glob files
@@ -23,46 +59,35 @@ def streamlit_app():
     if 'edit_df' not in st.session_state:           # data editor
         st.session_state['edit_df'] = None
 
-    
-    # Inititalize pre-defined values
-    ## DICOM tags: used as Unique identifiers
-    unique_ids = [
-        'PatientName', 
-        'PatientID', 
-        'AccessionNumber'
-    ]
-
-    ## DICOM tags: to be Shown in template for user's reference
-    ref_tags = [
-        'PatientBirthDate', 
-        'PatientSex', 
-        'PatientAge', 
-        'StudyDate'
-    ]
-
-    ## DICOM tags: to be Anonymized as empty string
-    predefined_tags = None
-
-    ## DICOM tags: Not anonymized
-    default_tags = None
-
-    ## DICOM tags: to be Anonymized default values or user's inputs
-    update_tags = {
-        'PatientName':      '', 
-        'PatientID':        '',
-        'InstitutionName':  '', 
-        'StudyDate':        datetime(1970,1,1).strftime('%Y%m%d'),
-        'PatientBirthDate': datetime(1970,1,1).strftime('%Y%m%d'),
-        'AccessionNumber':  lambda x: x[3:]
-    }
-
-
     # Page user interface
     st.set_page_config(page_title = 'DICOM Anonymizer')
     st.write('# DICOM Anonymizer:hospital::card_file_box:')
     
-    # Capture user's input of folder directory
+    # A container of user instruction
+    with st.expander(':bulb: Expand for User Tips'): 
+        st.markdown(
+            '''
+            ### How are the DICOM tags anonymized? 
+            You can edit the values for the following DICOM tags: 
+            - :red[PatientName]: We advise anonymizing with case numbers or random characters. 
+            - :red[PatientID]: We advise anonymizing with case numbers or random characters. 
+            - :red[InstitutionName]: We advise anonymizing with your initials to identify the owners of the anonymized files. 
+            
+            There are default values for the following DICOM tags:
+            - :red[StudyDate] &rarr; 1970/1/1
+            - :red[PatientBirthDate] &rarr; 1970/1/1
+            - :red[AccessionNumber]: The first 3 character representing the institution is removed. (i.e. PXH12345 &rarr; 12345)
+            
+            The remaining DICOM tags are anonymized by wiping out the original values.
+            
+            ### What are the best practice of using this Anonymizer?
+            1. If you have a very large folder (i.e. there are >1,000 DICOM files), split the folder into batches and process them by batch to save processing time. 
+            2. Update your inputs using the automatically generated template.
+            3. When you upload the updated template, there is no empty input under the columns of "Update_[:red[DICOM Tag]]".
+            '''
+        )
     
+    # Capture user's input of folder directory
     user_folder = st.text_input(
         'Please copy and paste the full directory of the folder with DICOM files.', 
         placeholder='Enter the full file directory, e.g., "C:/Users/Documents"'
@@ -103,7 +128,7 @@ def streamlit_app():
                     unique_ids=unique_ids, 
                     ref_tags=ref_tags
                 )
-                st.session_state['uids'] = st.session_state['dcm_info'][unique_ids].drop_duplicates()
+                st.session_state['uids'] = st.session_state['dcm_info'][(unique_ids + ref_tags)].drop_duplicates()
             except: 
                 st.error(':warning: We cannot find any files in the file format in the directory.')
 
@@ -112,41 +137,17 @@ def streamlit_app():
         pass
 
     # When files are found, display unique ID df
-    else: 
+    else:     
+        edit_df = create_update_cols(st.session_state['uids'], update_tags)
+        st.session_state['edit_df'] = edit_df
+        
         st.success('''
                 We have found the following unique cases - :card_file_box:  
                 :point_down: You may download the auto-generated template by clicking the "Download" button below.
                 ''')
         
-        edit_df = create_update_cols(st.session_state['uids'], update_tags)
-        st.session_state['edit_df'] = edit_df
-        
         # A placeholder for download function
         download_function = st.empty()
-        
-        # A container of user instruction
-        with st.expander('User tips'): 
-            st.markdown(
-                '''
-                ### How are the DICOM tags anonymized? 
-                The following DICOM tags are allowed for updating values: 
-                - :blue-background[PatientName] : We advise anonymizing with case numbers or random characters. 
-                - :blue-background[PatientID] : We advise anonymizing with case numbers or random characters. 
-                - :blue-background[InstitutionName] : We advise anonymizing with your initials to identify the owners of the anonymized files. 
-                
-                The following DICOM tags are anonymized with default values:
-                - :blue-background[StudyDate] -> 1970/1/1
-                - :blue-background[PatientBirthDate] -> 1970/1/1
-                - :blue-background[AccessionNum] : The first 3 character representing the institution is removed. (i.e. PXH12345 -> 12345)
-                
-                The remaining DICOM tags are anonymized by wiping out the original values.
-                
-                ### What are the best practice of using this Anonymizer?
-                1. Update your inputs using the automatically generated template.
-                2. Under the columns of "Update_[DICOM Tag]", there is no empty input.
-                3. 
-                '''
-            )
         
         # A placeholder for display data editor
         display_data = st.empty()
@@ -181,23 +182,15 @@ def streamlit_app():
             if readfile_error: 
                 pass
             else: 
-                # Error checking of columns in user uploaded file
-                if 'Update_PatientID' not in upload_df:
-                    upload_error.error(':warning: Error in uploaded file: **Column "Update_PatientID"** must be contained.')
-                elif 'PatientID' not in upload_df:
-                    upload_error.error(':warning: Error in uploaded file: **Column "PatientID"** must be contained.')
-                # Error checking of unmatched PatientIDs
-                elif (unmatched_ids := check_unmatched_patient_ids(upload_df, st.session_state['edit_df'])):
-                    # Display PatientIDs in error message
-                    unmatched_ids_str = ', '.join(map(str, unmatched_ids))
-                    upload_error.error(
-                        f':warning: Error in uploaded file: The following **PatientIDs** have no matches in the uploaded file - :blue-background[{unmatched_ids_str}].'
-                    )
+                # Error checking
+                error_message = validate_upload(st.session_state['edit_df'], upload_df, update_tags, upload_df_id)
+
+                if error_message:
+                    st.error(error_message)
                 
                 # Match the uploaded file with data editor
                 else:
-                    upload_df = upload_df.fillna('')
-                    upload_df['Update_PatientID'] = upload_df['Update_PatientID'].astype(str)
+                    upload_df = upload_df.fillna('').astype(str)
                     try: 
                         edit_df = update_data_editor(st.session_state['edit_df'], upload_df, update_tags)
                     except Exception as e: 
@@ -205,32 +198,10 @@ def streamlit_app():
 
         # Save latest version of edit_df to session state
         st.session_state['edit_df'] = edit_df
-
-        # Display user's inputs
-        config = {
-            'PatientID': st.column_config.TextColumn(
-                'PatientID', 
-                disabled=True
-                ),
-            'PatientName': st.column_config.TextColumn(
-                'PatientName', 
-                disabled=True
-                ),
-            'AccessionNum': st.column_config.TextColumn(
-                'AccessionNum', 
-                disabled=True
-                ), 
-            'Update_PatientID': st.column_config.TextColumn(
-                'Update_PatientID', 
-                required=True,
-                max_chars=256
-                )
-        }
         
         display_data.dataframe(
             st.session_state['edit_df'], 
             use_container_width=True, 
-            column_config=config,
             hide_index=True
         )
 
@@ -244,32 +215,24 @@ def streamlit_app():
         
         # Capture user's input to write anonymized files 
         if st.button("Anonymize files", type='primary'): 
-            # Check if user has entered all required field before writing files
-            if edit_df['Update_PatientID'].isnull().any() or (edit_df['Update_PatientID'] == '').any(): 
-                st.error(':warning: **Column "Update_PatientID"** cannot be empty. Please fill in all required fields. ')
+            anon_dcm_df = st.session_state['dcm_info'].copy().filter(like='dir', axis=1)
+            anon_dcm_df = anon_dcm_df.join(st.session_state['edit_df'].filter(like='Update_', axis=1))
             
-            # Finalize user's inputs to anonymize function
-            else: 
-                anon_dcm_df = st.session_state['dcm_info'].copy()
-                anon_dcm_df = anon_dcm_df.join(st.session_state['edit_df'][['Update_PatientID']])
-                
-                with st.spinner(text='Writing files...'): 
-                    for _, row in anon_dcm_df.iterrows():
-                        file_dir = row['file_dir']
-                        output_dir = row['output_dir']
-                        update = {
-                            Tag((0x0010, 0x0010)): row['Update_PatientID'],     # Patient's Name
-                            Tag((0x0010, 0x0020)): row['Update_PatientID']      # Patient's ID
-                        }
-                        anonymize(
-                            file_dir=file_dir, 
-                            output_dir=output_dir, 
-                            tags=predefined_tags,
-                            update=update,
-                            tags_2_spare=default_tags
-                        )
-            
-                st.write(f'''
-                        :star2: Anonymized files are written in:  
-                        :open_file_folder: :blue-background[{st.session_state['folder']}-Anonymized]
-                        ''')
+            with st.spinner(text='Writing files...'): 
+                for _, row in anon_dcm_df.iterrows():
+                    file_dir = row['file_dir']
+                    output_dir = row['output_dir']
+                    update = consolidate_tags(row, update_tags)
+                    
+                    anonymize(
+                        file_dir=file_dir, 
+                        output_dir=output_dir, 
+                        tags=tags_2_anon,
+                        update=update,
+                        tags_2_spare=tags_2_spare
+                    )
+        
+            st.write(f'''
+                    :star2: Anonymized files are written in:  
+                    :open_file_folder: :blue[{st.session_state['folder']}-Anonymized]
+                    ''')
