@@ -1,8 +1,9 @@
 # Streamlit to Executable
-#### [Folder Structure](https://github.com/birbflock/DicomAnonymizer.git)
+#### [Reference: Folder Structure](https://github.com/birbflock/DicomAnonymizer.git)
 
 ## Create a Virtual Environment
-Create the environment based on `environment.yml`
+- Create the environment based on `environment.yml`
+- Do NOT change / upgrade the version of those dependencies
 ```bash
 conda env create -f environment.yml
 ```
@@ -42,7 +43,7 @@ if __name__ == "__main__":
     )
 ```
 
-# Navigate to the Streamlit Path (TBC)
+# Navigate to the Streamlit Path
 
 In the version we are using, it is located at: `.env\Lib\site-packages\streamlit\web\cli.py`
 

@@ -27,8 +27,7 @@ def streamlit_app():
         'PatientName':      '',                                     # for user's inputs
         'PatientID':        '',                                     # for user's inputs
         'InstitutionName':  '',                                     # for user's inputs
-        'StudyDate':        '19700101',
-        'PatientBirthDate': '19700101',
+        'PatientBirthDate': '19700101',                             # reset patient's birth date to 0
         'AccessionNumber':  lambda x: x[3:]                         # remove the first 3 characters        
     }
 
@@ -64,26 +63,31 @@ def streamlit_app():
     st.write('# DICOM Anonymizer:hospital::card_file_box:')
     
     # A container of user instruction
-    with st.expander(':bulb: Expand for User Tips'): 
+    with st.expander(':bulb: **Click Here for User Tips on Best Practices**'): 
         st.markdown(
             '''
-            ### How are the DICOM tags anonymized? 
-            You can edit the values for the following DICOM tags: 
-            - :red[PatientName]: We advise anonymizing with case numbers or random characters. 
-            - :red[PatientID]: We advise anonymizing with case numbers or random characters. 
-            - :red[InstitutionName]: We advise anonymizing with your initials to identify the owners of the anonymized files. 
+            ### Folder Preparation
+            - :red[Large Folders]: If your folder contains more than 10,000 DICOM files, consider splitting it into smaller batches to optimize processing time.
+            - :red[Scan Position]: It is recommended to include only one body part scanned per folder for consistency.
             
-            There are default values for the following DICOM tags:
-            - :red[StudyDate] &rarr; 1970/1/1
-            - :red[PatientBirthDate] &rarr; 1970/1/1
-            - :red[AccessionNumber]: The first 3 character representing the institution is removed. (i.e. PXH12345 &rarr; 12345)
+            ### Modification of DICOM Tag values
+            - :red[Update Input Template]: Update your inputs using the automatically generated template.
+            - :red[Avoid Empty Fields]: When uploading the updated template, ensure that there are NO empty inputs in the columns that start with "Update" (e.g. `Update_PatientName`). The values under these columns will be directly applied to the anonymized files. 
+            - :red[Default values]: You can modify the following DICOM tags. For your convenience, default values have been pre-set for certain tags to streamline the anonymization process.
             
-            The remaining DICOM tags are anonymized by wiping out the original values.
+            | DICOM Tag           | Default value                                                                                    |
+            |---------------------|--------------------------------------------------------------------------------------------------|
+            | Patient Name        | No default value. We advise using case numbers / random characters.                              |
+            | Patient ID          | No default value. We advise using case numbers / random characters.                              |
+            | Institution Name    | No default value. We advise using your initial.                                                  |
+            | Patient Birth Date  | `1970/01/01` (Format: YYYY/MM/DD)                                                                  |
+            | Accession Number    | The first three characters representing the institution is removed. (e.g. `PXH12345` becomes `12345`) |
             
-            ### What are the best practice of using this Anonymizer?
-            1. If you have a very large folder (i.e. there are >1,000 DICOM files), split the folder into batches and process them by batch to save processing time. 
-            2. Update your inputs using the automatically generated template.
-            3. When you upload the updated template, there is no empty input under the columns of "Update_[:red[DICOM Tag]]".
+            - The other DICOM tags are anonymized by wiping out the original values.
+            
+            ### Folder Output
+            - The anonymized files will be saved in a new folder named `"[your file path]-Anonymized"`. For example, if you file path is `"C:/Documents/dicom"`, the destination will be `"C:/Documents/dicom-Anonymized"`.
+
             '''
         )
     
@@ -94,7 +98,7 @@ def streamlit_app():
     )
 
     user_fformat = st.text_input(
-        'File format', 
+        'File extension', 
         placeholder='e.g., "dcm"'
     )
 
