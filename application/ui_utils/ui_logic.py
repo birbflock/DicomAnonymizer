@@ -58,13 +58,13 @@ def check_unmatched_patient_ids(upload_df, edit_df, upload_df_id):
     """
     unmatched_patient_ids = edit_df[~edit_df[f'{upload_df_id}'].isin(upload_df[f'{upload_df_id}']) & 
                                       ~edit_df[f'{upload_df_id}'].isin(upload_df[f'Update_{upload_df_id}'])]
-    return unmatched_patient_ids['PatientID'].unique().tolist()
+    return unmatched_patient_ids[f'{upload_df_id}'].unique().tolist()
 
 def check_empty_cols(edit_df, update_tags):
     empty_col = []
     for tag, _ in update_tags.items():
         if edit_df[f'Update_{tag}'].isnull().any() or (edit_df[f'Update_{tag}'] == '').any(): 
-            empty_col.append(tag)
+            empty_col.append(f'Update_{tag}')
     return empty_col
 
 def validate_upload(edit_df, upload_df, update_tags, upload_df_id):

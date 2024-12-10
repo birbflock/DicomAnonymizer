@@ -10,7 +10,7 @@ def create_output_dir(file_dir: str, folder_dir: Path) -> str:
     """Generates the output directory path for anonymized files."""
     return str(file_dir).replace(str(folder_dir), str(folder_dir.parent / f"{folder_dir.name}-Anonymized"))
 
-def create_dcm_df(folder: str, fformat: str, unique_ids: list, ref_tags: list) -> pd.DataFrame:
+def create_dcm_df(folder: str, fformat: str, unique_ids: list, ref_tags: list, new_tags: list) -> pd.DataFrame:
     """
     Gathers the meta data of each DICOM file from the folder. 
         
@@ -19,34 +19,38 @@ def create_dcm_df(folder: str, fformat: str, unique_ids: list, ref_tags: list) -
     - fformat (str): The file format of the targeted files. 
     - unique_ids (list): The list of columns used as primary keys.
     - ref_tags (list): The list of columns to be shown in template.
+    - new_tags (list): The list of tags to be determine its existence. 
         
     Returns:
     - dcm_info (pd.DataFrame): information of the dicom tags. 
     """
     folder_dir = Path(folder)
-    all_dicom_files = list(folder_dir.rglob(f"*.{fformat}"))
     dcm_info = {
-        'file_dir': [], 
+        'folder_dir': [], 
         'output_dir': []
     }
-    dcm_info.update({dcm_tag: [] for dcm_tag in (unique_ids + ref_tags)})
+    dcm_info.update({dcm_tag: [] for dcm_tag in (unique_ids + ref_tags + new_tags)})
     
-    for file_dir in (all_dicom_files):
-        dcm_info['file_dir'].append(str(file_dir))
-        dcm_info['output_dir'].append(create_output_dir(file_dir, folder_dir))
+    for sub_folder in folder_dir.iterdir():
+        if sub_folder.is_dir():
+            for file_dir in sub_folder.rglob(f"*.{fformat}"):
+                dcm_info['folder_dir'].append(str(sub_folder))
+                dcm_info['output_dir'].append(create_output_dir(sub_folder, folder_dir))
 
-        try:
-            f = pydicom.dcmread(str(file_dir), stop_before_pixels=True)
-            
-            # Gather metadata from DICOM tags
-            for dcm_tag in (unique_ids + ref_tags):
-                if dcm_tag == 'PatientName': 
-                    dcm_info[dcm_tag].append(''.join(getattr(f, dcm_tag, '')))
-                else: 
-                    dcm_info[dcm_tag].append(getattr(f, dcm_tag, None))
-            
-        except Exception as e:
-            print(f"{e = }")
+                try:
+                    f = pydicom.dcmread(str(file_dir), stop_before_pixels=True)
+                    
+                    # Gather information from DICOM tags
+                    for dcm_tag in (unique_ids + ref_tags + new_tags):
+                        if dcm_tag == 'PatientName': 
+                            dcm_info[dcm_tag].append(''.join(getattr(f, dcm_tag, '')))
+                        else: 
+                            dcm_info[dcm_tag].append(getattr(f, dcm_tag, None))
+                    
+                except Exception as e:
+                    print(f"{e = }")
+
+                break   # only the read the 1st file of the subholder
     
     df = pd.DataFrame(dcm_info)
     df['PK'] = df[unique_ids].astype(str).agg('_'.join, axis=1)
@@ -113,7 +117,7 @@ def remove_info(dataset,
 
 
 def anonymize(file_dir, output_dir, tags=None, update: Optional[dict] = None, tags_2_spare: Optional[dict] = None,
-               **kwargs):
+               tags_2_create: Optional[dict] = None):
     """
     - Anonymizes a DICOM file by removing sensitive information based on specified tags. 
     - If no tags are provided, defaults to a predefined list. 
@@ -138,6 +142,7 @@ def anonymize(file_dir, output_dir, tags=None, update: Optional[dict] = None, ta
     - tags (list of tuples, optional): A list of DICOM tags to be anonymized. If None, default tags for sensitive patient information are used.
     - update (dict, optional): A dictionary of tags and their new values for updates.
     - tags_2_spare (list, optional): Tags that should not be modified.
+    - tags_2_create (list, optional): Tags to be created.
 
     Returns:
     - int: Returns 0 upon successful processing.
@@ -170,8 +175,16 @@ def anonymize(file_dir, output_dir, tags=None, update: Optional[dict] = None, ta
         ]
     try:
         f = pydicom.dcmread(str(file_dir))
+        
+        # Remove and update tags
         f.remove_private_tags()
         f.walk(lambda x1, x2: remove_info(x1, x2, tags=tags, va_type=[], update=update, tags_2_spare=tags_2_spare))
+        
+        # Create new tags
+        for dcm_tag, value in tags_2_create.items():
+            setattr(f, dcm_tag, value)
+        
+        # Write files
         Path(output_dir).parent.mkdir(parents=True, exist_ok=True)
         f.save_as(output_dir)
     except InvalidDicomError:

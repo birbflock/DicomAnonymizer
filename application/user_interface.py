@@ -4,45 +4,10 @@ import pandas as pd
 
 from anonymizer_utils.anonymize_dicom import *
 from ui_utils.ui_logic import *
+from config import unique_ids, ref_tags, update_tags, upload_df_id, tags_2_anon, tags_2_spare, new_tags
 
 def streamlit_app(): 
-    # Inititalize pre-defined values
-    ## DICOM tags: used as Unique identifiers (list)
-    unique_ids = [
-        'PatientName', 
-        'PatientID', 
-        'AccessionNumber'
-    ]
-
-    ## DICOM tags: to be Shown in template for user's reference (list)
-    ref_tags = [
-        'PatientBirthDate', 
-        'PatientSex', 
-        'PatientAge', 
-        'StudyDate'
-    ]
-    
-    ## DICOM tags: to be Anonymized default values or user's inputs (dict)
-    update_tags = {
-        'PatientName':      '',                                     # for user's inputs
-        'PatientID':        '',                                     # for user's inputs
-        'InstitutionName':  '',                                     # for user's inputs
-        'PatientBirthDate': '19700101',                             # reset patient's birth date to 0
-        'AccessionNumber':  lambda x: x[3:]                         # remove the first 3 characters        
-    }
-
-    ## DICOM tag: used as identifier in user-uploaded file (str)
-    upload_df_id = 'PatientID'
-    
-    ## DICOM tags: to be Anonymized as empty string (None-default or list)
-    ## >> Example: tags_2_anon = [(0x0010, 0x0010), (0x0010, 0x0020)]
-    tags_2_anon = None
-
-    ## DICOM tags: Not anonymized (list)
-    tags_2_spare = []
-
-
-# Initialize session states
+    # Initialize session states
     if 'user_folder' not in st.session_state:       # user input directory
         st.session_state['user_folder'] = ''
     if 'folder' not in st.session_state:            # folder path to glob files
@@ -57,6 +22,8 @@ def streamlit_app():
         st.session_state['uids'] = None
     if 'edit_df' not in st.session_state:           # data editor
         st.session_state['edit_df'] = None
+    if 'uploader_key' not in st.session_state:
+        st.session_state['uploader_key'] = 0
 
     # Page user interface
     st.set_page_config(page_title = 'DICOM Anonymizer')
@@ -65,13 +32,13 @@ def streamlit_app():
     # A container of user instruction
     with st.expander(':bulb: **Click Here for User Tips on Best Practices**'): 
         st.markdown(
-            '''
+            f'''
             ### Folder Preparation
             - :red[Large Folders]: If your folder contains more than 10,000 DICOM files, consider splitting it into smaller batches to optimize processing time.
             - :red[Scan Position]: It is recommended to include only one body part scanned per folder for consistency.
             
             ### Modification of DICOM Tag values
-            - :red[Update Input Template]: Update your inputs using the automatically generated template.
+            - :red[Update Input Template]: Update your inputs using the automatically generated template. If you prefer to use your own template, please ensure that you include the column "{upload_df_id}" as an identifier for the cases.
             - :red[Avoid Empty Fields]: When uploading the updated template, ensure that there are NO empty inputs in the columns that start with "Update" (e.g. `Update_PatientName`). The values under these columns will be directly applied to the anonymized files. 
             - :red[Default values]: You can modify the following DICOM tags. For your convenience, default values have been pre-set for certain tags to streamline the anonymization process.
             
@@ -108,6 +75,7 @@ def streamlit_app():
             st.session_state['user_folder'] = user_folder
             st.session_state['folder'] = user_folder.replace('\\', '/')
             st.session_state['dcm_info'] = None
+            st.session_state['uploader_key'] += 1
 
         if not user_fformat == st.session_state['user_fformat']:
             st.session_state['user_fformat'] = user_fformat
@@ -130,11 +98,12 @@ def streamlit_app():
                     folder=st.session_state['folder'], 
                     fformat=st.session_state['fformat'], 
                     unique_ids=unique_ids, 
-                    ref_tags=ref_tags
+                    ref_tags=ref_tags, 
+                    new_tags=list(new_tags.keys())
                 )
                 st.session_state['uids'] = st.session_state['dcm_info'][(unique_ids + ref_tags)].drop_duplicates()
             except: 
-                st.error(':warning: We cannot find any files in the file format in the directory.')
+                st.error(':warning: We cannot find any files in the file extension in the directory.')
 
     # When fetch file function is not triggered, display nothing
     if st.session_state['dcm_info'] is None: 
@@ -150,6 +119,12 @@ def streamlit_app():
                 :point_down: You may download the auto-generated template by clicking the "Download" button below.
                 ''')
         
+        # A placeholder for description of creating new tags
+        desc_new_tag = st.empty()
+        
+        # A placeholder for selectbox of creating new tags
+        create_new_tag = st.empty()
+        
         # A placeholder for download function
         download_function = st.empty()
         
@@ -162,12 +137,16 @@ def streamlit_app():
         # A placeholder for upload error message
         upload_error = st.empty()
         
-        # Read user uploaded file
+        
+        # Get user uploaded file
         upload_file = upload_function.file_uploader(
-            label='Choose a csv/excel file, which must contain column "PatientID" as identifer.', 
-            type=['csv', 'xsl', 'xslx']
-        )
-
+            label=f'Choose a csv/excel file, which must contain column "{upload_df_id}" as identifer.', 
+            type=['csv', 'xsl', 'xslx'], 
+            key = st.session_state['uploader_key']
+            )
+        
+        
+        # Read user uploaded file
         if upload_file is not None: 
             file_extension = Path(upload_file.name).suffix
             readfile_error = False
@@ -217,26 +196,45 @@ def streamlit_app():
             file_name='unique_ids.csv'
         )
         
+        # Selectbox for selecting values for new tag
+        tags_2_create = {}
+        for dcm_tag, options in new_tags.items():
+            if st.session_state['dcm_info'][dcm_tag].isnull().any():
+                
+                notag_ids = st.session_state['dcm_info'].loc[st.session_state['dcm_info'][dcm_tag].isnull(), upload_df_id].unique().tolist()
+                notag_ids_str = ','.join(notag_ids)
+                desc_new_tag.warning(
+                    f'''
+                    :warning: We have identified that some DICOM series are missing the DICOM Tag :blue[{dcm_tag}] - {upload_df_id}: `{notag_ids_str}`.
+                    '''
+                )
+                tags_2_create[dcm_tag] = create_new_tag.selectbox(f'Please select a value for DICOM Tag: `{dcm_tag}`.', options)
+        
         # Capture user's input to write anonymized files 
         if st.button("Anonymize files", type='primary'): 
-            anon_dcm_df = st.session_state['dcm_info'].copy().filter(like='dir', axis=1)
-            anon_dcm_df = anon_dcm_df.join(st.session_state['edit_df'].filter(like='Update_', axis=1))
+            if upload_file is None: 
+                st.warning(':warning: Please upload a file as your inputs before file anonymization.')
+            else:
+                anon_dcm_df = st.session_state['dcm_info'].copy().filter(like='dir', axis=1)
+                anon_dcm_df = anon_dcm_df.join(st.session_state['edit_df'].filter(like='Update_', axis=1))
+                
+                with st.spinner(text='Creating anonymized files...'): 
+                    for _, row in anon_dcm_df.iterrows():
+                        folder_dir = Path(row['folder_dir'])
+                        for file_dir in folder_dir.rglob(f"*.{st.session_state['fformat']}"):                        
+                            output_dir = f"{row['output_dir']}/{Path(file_dir).name}"
+                            update = consolidate_tags(row, update_tags)
+
+                            anonymize(
+                                file_dir=file_dir, 
+                                output_dir=output_dir, 
+                                tags=tags_2_anon,
+                                update=update,
+                                tags_2_spare=tags_2_spare, 
+                                tags_2_create=tags_2_create
+                            )
             
-            with st.spinner(text='Writing files...'): 
-                for _, row in anon_dcm_df.iterrows():
-                    file_dir = row['file_dir']
-                    output_dir = row['output_dir']
-                    update = consolidate_tags(row, update_tags)
-                    
-                    anonymize(
-                        file_dir=file_dir, 
-                        output_dir=output_dir, 
-                        tags=tags_2_anon,
-                        update=update,
-                        tags_2_spare=tags_2_spare
-                    )
-        
-            st.write(f'''
-                    :star2: Anonymized files are written in:  
-                    :open_file_folder: :blue[{st.session_state['folder']}-Anonymized]
-                    ''')
+                st.write(f'''
+                        :star2: Anonymized files are written in:  
+                        :open_file_folder: :blue[{st.session_state['folder']}-Anonymized]
+                        ''')
