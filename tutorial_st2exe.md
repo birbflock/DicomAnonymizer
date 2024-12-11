@@ -43,21 +43,6 @@ if __name__ == "__main__":
     )
 ```
 
-# Navigate to the Streamlit Path
-
-In the version we are using, it is located at: `.env\Lib\site-packages\streamlit\web\cli.py`
-
-# Add the Magic Function (TBC)
-```python
-# ... def main(log_level="info"):
-# [...]
-# You can use any name you prefer as long as it starts with an underscore
-def _main_run_clExplicit(file, is_hello, args=[], flag_options={}):
-    bootstrap.run(file, is_hello, args, flag_options)
-
-# ...if __name__ == "__main__":
-# ...    main()
-```
 
 # Create a Hook to Get Streamlit Metadata
 
@@ -72,42 +57,13 @@ datas, binaries, hiddenimports = collect_all('streamlit', include_py_files=False
 Run the following command to create the first `run_app.spec` file. 
 
 ```bash
-pyinstaller --onefile --additional-hooks-dir=./hooks run_app.py --clean
-# --onefile: Create a single output file
-# --clean: Delete cache and remove temporary files before building
-# --additional-hooks-dir: An additional path to search for hooks. This option can be used multiple times.
+pyi-makespec --onefile --additional-hooks-dir=./hooks run_main.py
 ```
 
-# Create Streamlit Configuration Files
-- Create `.streamlit\config.toml`.
-- Copy EXACTLY the code below.
-```bash
 
-[global]
-developmentMode = false
-
-[server]
-port = 8502
-
-[client]
-showErrorDetails = True
-
-```
-
-# Copy the Configuration Files to the Output Folder (TBC)
-```bash
-xcopy /s /e .streamlit output/.streamlit
-# Select D = directory
-```
-
-# Copy app.py to the Output Folder (TBC)
-```bash
-copy app.py output/app.py
-```
-
-# Add the Data to the New Hook in `run_app.spec`
+# Update the Data to the New Hook in `run_app.spec`
 - Amend the file with the codes below.
-- Change `<path_to_env>` and `<env_name>` to your path.
+- Change `<path_to_env>`, `<env_name>` and `<path_to_app>` to your paths.
 ```python
 ...
 a = Analysis(
@@ -143,6 +99,6 @@ pyinstaller run_app.spec --clean
 
 ## 🎈 It's done! run your `dist/DicomAnonymizer.exe` file and see the magic 🪄
 
-<pre>Huge Credits From: 
+Huge Credits From: 
+- This <a href="https://discuss.streamlit.io/t/using-pyinstaller-or-similar-to-create-an-executable/902/73">reply</a> from a discussion thread on Streamlit forum
 - The organised workflow by <a href="https://github.com/jvcss/PyInstallerStreamlit/tree/master">jvcss</a>
-- The <a href="https://discuss.streamlit.io/t/using-pyinstaller-or-similar-to-create-an-executable/902">discussion</a> in Streamlit forum</pre>
