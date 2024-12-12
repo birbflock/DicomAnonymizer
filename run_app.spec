@@ -18,7 +18,7 @@ a = Analysis(
         "./streamlit/static"
     ),
     (   
-        "C:/Users/cyuet/Documents/diir_work/DicomAnonymizer/app_demo/app_test/DicomAnonymizer_test/application",
+        "C:/Users/cyuet/Documents/diir_work/DicomAnonymizer/app/executable/application",
         "./application"
     )
     ],

@@ -1,4 +1,4 @@
-('C:\\Users\\cyuet\\Documents\\diir_work\\DicomAnonymizer\\app_demo\\app_test\\DicomAnonymizer_test\\build\\run_app\\PYZ-00.pyz',
+('C:\\Users\\cyuet\\Documents\\diir_work\\DicomAnonymizer\\app\\executable\\build\\run_app\\PYZ-00.pyz',
  [('IPython',
    'C:\\Users\\cyuet\\miniforge-pypy3\\envs\\dicomanon_test\\lib\\site-packages\\IPython\\__init__.py',
    'PYMODULE'),
