@@ -21,7 +21,7 @@ update_tags = {
     'PatientID':        '',                                     # for user's inputs
     'InstitutionName':  '',                                     # for user's inputs
     'PatientBirthDate': '19700101',                             # reset patient's birth date to 0
-    'AccessionNumber':  lambda x: re.sub(r'^[a-zA-Z]+', '', x) # remove the first 3 characters        
+    'AccessionNumber':  lambda x: re.sub(r'^[a-zA-Z]+', '', x)  # remove the first 3 characters        
 }
 
 # DICOM tag: used as identifier in user-uploaded file (str)
