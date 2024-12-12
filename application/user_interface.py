@@ -4,7 +4,7 @@ import pandas as pd
 
 from anonymizer_utils.anonymize_dicom import *
 from ui_utils.ui_logic import *
-from config import unique_ids, ref_tags, update_tags, upload_df_id, tags_2_anon, tags_2_spare, new_tags
+from app_settings.config import unique_ids, ref_tags, update_tags, upload_df_id, tags_2_anon, tags_2_spare, new_tags
 
 def streamlit_app(): 
     # Initialize session states
@@ -22,7 +22,7 @@ def streamlit_app():
         st.session_state['uids'] = None
     if 'edit_df' not in st.session_state:           # data editor
         st.session_state['edit_df'] = None
-    if 'uploader_key' not in st.session_state:
+    if 'uploader_key' not in st.session_state:      # key (instance) of file_uploader
         st.session_state['uploader_key'] = 0
 
     # Page user interface
@@ -48,7 +48,7 @@ def streamlit_app():
             | Patient ID          | No default value. We advise using case numbers / random characters.                              |
             | Institution Name    | No default value. We advise using your initial.                                                  |
             | Patient Birth Date  | `1970/01/01` (Format: YYYY/MM/DD)                                                                  |
-            | Accession Number    | The first three characters representing the institution is removed. (e.g. `PXH12345` becomes `12345`) |
+            | Accession Number    | The first few characters representing the institution is removed. (e.g. `PXH12345` becomes `12345`) |
             
             - The other DICOM tags are anonymized by wiping out the original values.
             
